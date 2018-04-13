@@ -1,0 +1,1 @@
+java -classpath ..\out\production\tp2;..\lib\* Radio radio1

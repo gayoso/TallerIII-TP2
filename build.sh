@@ -1,0 +1,1 @@
+javac src/* -d out/production/tp2 -cp lib/*
