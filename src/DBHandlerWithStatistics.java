@@ -1,10 +1,10 @@
-import com.google.gson.Gson;
-
 import java.io.IOException;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.*;
 
+// clase que abstrae una base de datos con capacidad de lanzar estadisticas
+// periodicamente
 public abstract class DBHandlerWithStatistics<T extends DatabaseRow>
         extends RabbitMQProcess {
 
@@ -18,16 +18,17 @@ public abstract class DBHandlerWithStatistics<T extends DatabaseRow>
         super(host);
         this.database = database;
 
-        List<Runnable> statisticTasks = getStatisticsOperations();
-        List<Integer> statisticTasksPeriods = getStatisticsPeriodsSeconds();
+        List<StatisticTask> statisticTasks = getStatistics();
+        //List<Integer> statisticTasksPeriods = getStatisticsPeriodsSeconds();
         if (statisticTasks.size() > 0) {
             statisticsScheduler = Executors
-                    .newScheduledThreadPool(1);
+                    .newScheduledThreadPool(
+                            Configuration.PoolSizeForDBstatistics);
             statisticsHandles = new LinkedList<>();
 
-            for (int i = 0; i < statisticTasks.size(); ++i) {
-                Runnable r = statisticTasks.get(i);
-                int period = statisticTasksPeriods.get(i);
+            for (StatisticTask task : statisticTasks) {
+                Runnable r = task.getRunnable();
+                int period = task.getPeriod();
                 ScheduledFuture<?> statisticsHandle =
                         statisticsScheduler.scheduleAtFixedRate(r, period,
                                 period, TimeUnit.SECONDS);
@@ -48,7 +49,5 @@ public abstract class DBHandlerWithStatistics<T extends DatabaseRow>
         }
     }
 
-    protected abstract List<Runnable> getStatisticsOperations();
-
-    protected abstract List<Integer> getStatisticsPeriodsSeconds();
+    protected abstract List<StatisticTask> getStatistics();
 }

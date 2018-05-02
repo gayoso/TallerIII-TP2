@@ -3,6 +3,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.TimeoutException;
 
+// clase que logea conexiones y desconexiones
 public class ConnDisconnFileLogger extends FileLogger {
 
     public ConnDisconnFileLogger(String host, String logFilename) throws
@@ -23,5 +24,6 @@ public class ConnDisconnFileLogger extends FileLogger {
         ConnDisconnFileLogger fileLogger =
                 new ConnDisconnFileLogger(Configuration.RabbitMQHost,
                         argv[0]);
+        fileLogger.run();
     }
 }

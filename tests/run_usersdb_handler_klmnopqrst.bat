@@ -1,0 +1,1 @@
+java -classpath ..\out\production\tp2;..\lib\* UsersDBHandler k.# l.# m.# n.# o.# p.# q.# r.# s.# t.#

@@ -5,10 +5,11 @@ import com.rabbitmq.client.ConnectionFactory;
 import java.io.IOException;
 import java.util.concurrent.TimeoutException;
 
-public class RabbitMQProcess {
+// clase base para un proceso que utiliza rabbitmq
+public abstract class RabbitMQProcess {
 
-    protected Connection connection;
-    protected Channel channel;
+    private Connection connection;
+    private Channel channel;
 
     public RabbitMQProcess(String host) throws IOException, TimeoutException {
 
@@ -21,7 +22,17 @@ public class RabbitMQProcess {
         connection = factory.newConnection();
         channel = connection.createChannel();
 
+        Logger.init();
+
         addShutdownHook();
+    }
+
+    protected Connection getConnection() {
+        return connection;
+    }
+
+    protected Channel getChannel() {
+        return channel;
     }
 
     public void addShutdownHook() {
@@ -36,14 +47,16 @@ public class RabbitMQProcess {
                 try {
                     instance.close();
                 } catch (IOException e) {
-                    e.printStackTrace();
+                    Logger.output("IOEXception during shutdown hook close");
                 } catch (TimeoutException e) {
-                    e.printStackTrace();
+                    Logger.output("TimeoutException during shutdown hook " +
+                            "close");
                 }
                 try {
                     mainThread.join();
                 } catch (InterruptedException e) {
-                    e.printStackTrace();
+                    Logger.output("InterruptedException during shutdown hook" +
+                            " close");
                 }
             }
         });
@@ -54,4 +67,5 @@ public class RabbitMQProcess {
         connection.close();
     }
 
+    public abstract void run() throws IOException;
 }

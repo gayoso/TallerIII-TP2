@@ -9,6 +9,9 @@ import java.util.List;
 import java.util.ListIterator;
 import java.util.concurrent.TimeoutException;
 
+// clase base para un logger a archivos
+// solo es necesario decirle a que exchanges bindearse para loggear los
+// mensajes que reciba
 public abstract class FileLogger extends RabbitMQProcess {
 
     PrintWriter logWriter;
@@ -19,15 +22,19 @@ public abstract class FileLogger extends RabbitMQProcess {
         super(host);
 
         // declare LOGS exchange
-        channel.exchangeDeclare(Configuration.LogsExchange,
+        getChannel().exchangeDeclare(Configuration.LogsExchange,
                 BuiltinExchangeType.DIRECT);
 
         logWriter = new PrintWriter(new FileWriter(logFilename, true));
 
-        logsQueue = channel.queueDeclare().getQueue();
+        logsQueue = getChannel().queueDeclare().getQueue();
         for (String tag : getBindings()) {
-            channel.queueBind(logsQueue, Configuration.LogsExchange, tag);
+            getChannel().queueBind(logsQueue, Configuration.LogsExchange, tag);
         }
+    }
+
+    @Override
+    public void run() throws IOException {
         consumeLogs();
     }
 
@@ -35,7 +42,7 @@ public abstract class FileLogger extends RabbitMQProcess {
 
     public String consumeLogs() throws IOException {
         // consume connection logs
-        Consumer connectConsumer = new DefaultConsumer(channel) {
+        Consumer connectConsumer = new DefaultConsumer(getChannel()) {
             @Override
             public void handleDelivery(String consumerTag, Envelope envelope,
                                        AMQP.BasicProperties properties,
@@ -48,7 +55,10 @@ public abstract class FileLogger extends RabbitMQProcess {
                 System.out.println(" [x] Received: " + logLine);
             }
         };
-        return channel.basicConsume(logsQueue, true, connectConsumer);
+
+        // consume de una cola temporal a traves de un exchange
+        // por lo que no tiene sentido ack manual
+        return getChannel().basicConsume(logsQueue, true, connectConsumer);
     }
 
     @Override

@@ -1,14 +1,15 @@
 import java.util.LinkedList;
 import java.util.List;
 
-public class UsersDBRow extends DatabaseRow {
+// clase que representa los usuarios que se van a persistir
+public class User extends DatabaseRow {
 
     public String username;
-    public List<UsersDBRowRadioConnection> connections = new LinkedList<>();
+    public List<UserRadioConnection> connections = new LinkedList<>();
     public long secondsListening;
     public int connectionsLimit;
 
-    public UsersDBRow(String username) {
+    public User(String username) {
         super(username);
 
         this.username = username;

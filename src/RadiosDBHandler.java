@@ -2,140 +2,158 @@ import com.google.gson.Gson;
 import com.rabbitmq.client.*;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.*;
 
-public class RadiosDBHandler extends DBHandlerWithStatistics<RadiosDBRow> {
+// base de datos distribuida de radios. recibe una serie de mascaras para
+// sharding y el objeto base de datos con quien interactuar
+public class RadiosDBHandler extends DBHandlerWithStatistics<Radio> {
 
-    public RadiosDBHandler(String host, Database<RadiosDBRow> database) throws
-            IOException,
-            TimeoutException {
+    private String queueName;
+
+    public RadiosDBHandler(String host, Database<Radio> database,
+                           List<String> masks)
+            throws IOException, TimeoutException {
         super(host, database);
         this.database = database;
 
         // declare RADIOS_DB exchange
-        channel.exchangeDeclare(Configuration.RadiosDBExchange,
-                BuiltinExchangeType.DIRECT);
+        getChannel().exchangeDeclare(Configuration.RadiosDBExchange,
+                BuiltinExchangeType.TOPIC);
 
         // declare RADIOS_STATS exchange
-        channel.exchangeDeclare(Configuration.RadiosStatisticsExchange,
+        getChannel().exchangeDeclare(Configuration.RadiosStatisticsExchange,
                 BuiltinExchangeType.FANOUT);
 
-        consumeConnections();
-        consumeDisconnections();
+        this.queueName = Configuration.RadiosDBExchange + "_" +
+                Configuration.maskListToStr(masks);
+        getChannel().queueDeclare(queueName, true, false, false, null);
+        for (String mask : masks) {
+            getChannel().queueBind(queueName,
+                    Configuration.RadiosDBExchange, mask);
+        }
     }
 
     @Override
-    protected List<Runnable> getStatisticsOperations() {
-        List<Runnable> operations = new LinkedList<>();
-        operations.add(new Runnable() {
+    public void run() throws IOException {
+
+        Consumer radiosConsumer = new DefaultConsumer(getChannel()) {
+            @Override
+            public void handleDelivery(String consumerTag, Envelope envelope,
+                                       AMQP.BasicProperties properties,
+                                       byte[] body) throws IOException {
+
+                // parse request
+                String jsonRequest = new String(body, "UTF-8");
+
+                DatabaseRequest request = new Gson().fromJson(jsonRequest,
+                        DatabaseRequest.class);
+
+                if (request.getType() == Configuration.UsersTypeConnect) {
+                    consumeConnection(request.getSerializedRequest());
+                } else if (request.getType() ==
+                        Configuration.UsersTypeDisconnect) {
+                    consumeDisconnection(request.getSerializedRequest());
+                } else {
+                    Logger.output("Invalid request type received: " +
+                            request.getType() + ", request: " +
+                            request.getSerializedRequest());
+                }
+
+                getChannel().basicAck(envelope.getDeliveryTag(), false);
+            }
+        };
+
+        getChannel().basicConsume(queueName, false, radiosConsumer);
+    }
+
+    @Override
+    protected List<StatisticTask> getStatistics() {
+        List<StatisticTask> operations = new LinkedList<>();
+
+        Runnable runnable = new Runnable() {
             @Override
             public void run() {
                 // get statistics
                 RadiosConnectionsStatistics stats = new RadiosConnectionsStatistics();
-                for (RadiosDBRow row : database.getRows()) {
-                    stats.radioConnections.put(row.name, row.connectedUsers);
+                for (Radio row : database.getRows()) {
+                    stats.getRadioConnections().put(row.getName(), row.getConnectedUsers());
                 }
                 String jsonStats = new Gson().toJson(stats);
 
                 try {
-                    channel.basicPublish(Configuration.RadiosStatisticsExchange, "",
+                    getChannel().basicPublish(
+                            Configuration.RadiosStatisticsExchange, "",
                             null, jsonStats.getBytes());
                 } catch (IOException e) {
-                    e.printStackTrace();
+                    Logger.output("IOEXception during statistics publish");
                 }
             }
-        });
+        };
+
+        operations.add(new StatisticTask(runnable,
+                Configuration.RadioStatisticsPeriodSeconds));
 
         return operations;
     }
 
-    @Override
-    protected List<Integer> getStatisticsPeriodsSeconds() {
-        List<Integer> operationsPeriods = new LinkedList<>();
-        operationsPeriods.add(Configuration.RadioStatisticsPeriodSeconds);
-        return operationsPeriods;
+    private void consumeConnection(String jsonRequest) throws IOException {
+
+        UserConnectRequest request = new Gson().fromJson(jsonRequest,
+                UserConnectRequest.class);
+
+        // get radio record from DB
+        Radio radio = database.getRow(request.getRadio());
+        if (radio == null) {
+            radio = new Radio(request.getRadio());
+        }
+
+        // add one connection to counter
+        radio.setConnectedUsers(radio.getConnectedUsers() + 1);
+        System.out.println(" [x] Adding one connection to radio: " +
+                radio.getName());
+
+        // save changes to db
+        database.updateRow(radio);
     }
 
-    private String consumeConnections() throws IOException {
-        // consume CONNECT_TO_RADIO requests
-        String connectUsersQueue = channel.queueDeclare().getQueue();
-        channel.queueBind(connectUsersQueue, Configuration.RadiosDBExchange,
-                Configuration.RadiosDBConnectTag);
-        Consumer connectConsumer = new DefaultConsumer(channel) {
-            @Override
-            public void handleDelivery(String consumerTag, Envelope envelope,
-                                       AMQP.BasicProperties properties,
-                                       byte[] body) throws IOException {
+    private void consumeDisconnection(String jsonRequest) throws IOException {
 
-                // parse request
-                String jsonRequest = new String(body, "UTF-8");
+        UserDisconnectRequest request = new Gson().fromJson(jsonRequest,
+                UserDisconnectRequest.class);
 
-                RadiosUpdateRequest request = new Gson().fromJson(jsonRequest,
-                        RadiosUpdateRequest.class);
+        // get radio record from DB
+        Radio radio = database.getRow(request.getRadio());
+        if (radio == null) {
+            radio = new Radio(request.getRadio());
+        }
 
-                // get radio record from DB
-                RadiosDBRow radio = database.getRow(request.radio);
-                if (radio == null) {
-                    radio = new RadiosDBRow(request.radio);
-                }
+        // add one connection to counter
+        radio.setConnectedUsers(radio.getConnectedUsers() - 1);
+        System.out.println(" [x] Removing one connection from " +
+                "radio: " + radio.getName());
 
-                // add one connection to counter
-                radio.connectedUsers++;
-                System.out.println(" [x] Adding one connection to radio: " +
-                        radio.name);
-
-                // save changes to db
-                database.updateRow(radio);
-            }
-        };
-        return channel.basicConsume(connectUsersQueue, true, connectConsumer);
-    }
-
-    private String consumeDisconnections() throws IOException {
-        // consume DISCONNECT_FROM_RADIO requests
-        String disconnectUsersQueue = channel.queueDeclare().getQueue();
-        channel.queueBind(disconnectUsersQueue, Configuration.RadiosDBExchange,
-                Configuration.RadiosDBDisconnectTag);
-        Consumer disconnectConsumer = new DefaultConsumer(channel) {
-            @Override
-            public void handleDelivery(String consumerTag, Envelope envelope,
-                                       AMQP.BasicProperties properties,
-                                       byte[] body) throws IOException {
-
-                // parse request
-                String jsonRequest = new String(body, "UTF-8");
-
-                RadiosUpdateRequest request = new Gson().fromJson(jsonRequest,
-                        RadiosUpdateRequest.class);
-
-                // get radio record from DB
-                RadiosDBRow radio = database.getRow(request.radio);
-                if (radio == null) {
-                    radio = new RadiosDBRow(request.radio);
-                }
-
-                // add one connection to counter
-                radio.connectedUsers--;
-                System.out.println(" [x] Removing one connection from " +
-                        "radio: " + radio.name);
-
-                // save changes to db
-                database.updateRow(radio);
-
-            }
-        };
-        return channel.basicConsume(disconnectUsersQueue, true,
-                disconnectConsumer);
+        // save changes to db
+        database.updateRow(radio);
     }
 
     public static void main(String[] argv) throws Exception {
+        if (argv.length < 1) {
+            System.out.println("Usage: UsersDBHAndler mask1 mask2 mask3");
+            return;
+        }
+        List<String> masks = new LinkedList<>(Arrays.asList(argv));
+
         // define database
-        Database<RadiosDBRow> database = new DatabaseRAM();
+        Database<Radio> database = new DatabaseJson<>(
+                Configuration.RadiosDBExchange + "_" +
+                        Configuration.maskListToStr(masks), Radio.class);
 
         // start database handler
         RadiosDBHandler handler = new RadiosDBHandler(Configuration.RabbitMQHost,
-                database);
+                database, masks);
+        handler.run();
     }
 }

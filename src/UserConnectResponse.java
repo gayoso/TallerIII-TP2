@@ -1,28 +1,77 @@
 import java.util.LinkedList;
 import java.util.List;
 
+// respuesta a un pedido de conexion
 public class UserConnectResponse {
 
     // request
-    public String username;
-    public String radio;
+    private String username;
+    private String radio;
 
     // id
-    public String returnQueueName;
+    private String returnQueueName;
 
     // response
-    public boolean couldConnect = false;
-    public int connectionId;
-    public List<UserDisconnectRequest> closedConnections = new LinkedList<>();
+    private boolean couldConnect = false;
+    private int connectionId;
+    private List<UserDisconnectRequest> closedConnections = new LinkedList<>();
 
     public UserConnectResponse(UserConnectRequest request) {
-        this.username = request.username;
-        this.radio = request.radio;
-        this.returnQueueName = request.returnQueueName;
+        this.setUsername(request.getUsername());
+        this.setRadio(request.getRadio());
+        this.setReturnQueueName(request.getReturnQueueName());
     }
 
     public String toLogLine() {
-        return Configuration.LogsConnectionTag + " " + username + " " +
-                radio + " " + connectionId;
+        return Configuration.LogsConnectionTag + " " + getUsername() + " " +
+                getRadio() + " " + getConnectionId();
+    }
+
+    public String getUsername() {
+        return username;
+    }
+
+    public void setUsername(String username) {
+        this.username = username;
+    }
+
+    public String getRadio() {
+        return radio;
+    }
+
+    public void setRadio(String radio) {
+        this.radio = radio;
+    }
+
+    public String getReturnQueueName() {
+        return returnQueueName;
+    }
+
+    public void setReturnQueueName(String returnQueueName) {
+        this.returnQueueName = returnQueueName;
+    }
+
+    public boolean isCouldConnect() {
+        return couldConnect;
+    }
+
+    public void setCouldConnect(boolean couldConnect) {
+        this.couldConnect = couldConnect;
+    }
+
+    public int getConnectionId() {
+        return connectionId;
+    }
+
+    public void setConnectionId(int connectionId) {
+        this.connectionId = connectionId;
+    }
+
+    public List<UserDisconnectRequest> getClosedConnections() {
+        return closedConnections;
+    }
+
+    public void setClosedConnections(List<UserDisconnectRequest> closedConnections) {
+        this.closedConnections = closedConnections;
     }
 }

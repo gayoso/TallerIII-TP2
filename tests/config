@@ -1,27 +1,37 @@
 {
-	"RadioSendPeriodSeconds":2,
+	"RadioSendPeriodMilliseconds":1000,
+	"RadioAudiofileBytesPerSecond":102400,
 	"KeepAlivePeriodSeconds":5,
 	"SecondsUntilDropConnection":10,
 	"MaxConnectionsPerFreeUser":3,
 	"MaxConnectionsPerUnlimitedUser":999,
+	
 	"RabbitMQHost":"localhost",
+	
+	"PoolSizeForDBstatistics":1,
+	
 	"UsersDBExchange":"USERS_DB",
-	"UsersDBConnectTag":"connect",
-	"UsersDBDisconnectTag":"disconnect",
-	"UsersDBKeepAliveTag":"keepalive",
+	"UsersTypeConnect":1,
+	"UsersTypeDisconnect":2,
+	"UsersTypeKeepAlive":3,
 	"UsersStatisticsExchange":"USERS_STATS",
 	"UsersStatisticsPeriodSeconds":10,
 	"UserStatisticsN":100,
+	
 	"RadiosDBExchange":"RADIOS_DB",
-	"RadiosDBConnectTag":"connect",
-	"RadiosDBDisconnectTag":"disconnect",
+	"RadiosTypeConnect":1,
+	"RadiosTypeDisconnect":2,
 	"RadiosStatisticsExchange":"RADIOS_STATS",
 	"RadioStatisticsPeriodSeconds":10,
+	
 	"ConnMgrUsersDBResponseQueue":"usersDBResponseQueueName",
+	
 	"ConnectionsQueue":"CONNECTIONS",
 	"DisconnectionsQueue":"DISCONNECTIONS",
 	"KeepAliveQueue":"KEEP_ALIVE",
+	
 	"RadioExchangePrefix":"BROADCAST-",
+	
 	"LogsExchange":"LOGS",
 	"LogsConnectionTag":"connect",
 	"LogsDisconnectionTag":"disconnect"

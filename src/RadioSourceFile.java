@@ -3,6 +3,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.Base64;
 
+// fuente generadora de contenido de radio a partir de un archivo
 public class RadioSourceFile implements RadioSource {
 
     String filename;
@@ -10,9 +11,9 @@ public class RadioSourceFile implements RadioSource {
     int bytesPerRead;
     byte[] buffer;
 
-    public RadioSourceFile(String filename, int bitrate) {
+    public RadioSourceFile(String filename) {
         this.filename = filename;
-        this.bytesPerRead = 1000 * Configuration.RadioSendPeriodSeconds;
+        this.bytesPerRead = 1000 * Configuration.RadioSendPeriodMilliseconds;
         buffer = new byte[this.bytesPerRead];
     }
 
@@ -24,16 +25,25 @@ public class RadioSourceFile implements RadioSource {
     @Override
     public byte[] getNextByteBlock() {
         try {
-            audio.read(buffer);
+            int bytesSent = audio.read(buffer);
+            if (bytesSent == -1) {
+                audio.close();
+                audio = new FileInputStream(filename);
+            }
+            Logger.output(" [x] Sent: " + bytesSent + " bytes");
             return Base64.getEncoder().encode(buffer);
         } catch (IOException e) {
-            e.printStackTrace();
+            Logger.output("IOException while reading blocks from file");
         }
         return "STATIC".getBytes();
     }
 
     @Override
     public void close() {
-
+        try {
+            audio.close();
+        } catch (IOException e) {
+            Logger.output("IOException while closing");
+        }
     }
 }

@@ -1,5 +1,6 @@
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.PrintStream;
 import java.io.PrintWriter;
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -8,6 +9,7 @@ public class Logger {
 
     public static logLevel currentLogLevel = logLevel.INFO;
     private static PrintWriter logWriter = null;
+    private static PrintStream out = null;
 
     public enum logLevel {
         ERROR,
@@ -41,7 +43,12 @@ public class Logger {
         }
     }
 
+    public static void init() {
+        out = System.out;
+    }
+
     public static void init(String filename) {
+        init();
         try {
             logWriter = new PrintWriter(new FileWriter(filename));
 
@@ -68,7 +75,11 @@ public class Logger {
 
         // output to screen
         if (currentLogLevel.ordinal() >= level.ordinal()) {
-            System.out.println(logLine);
+            if (out != null) {
+                out.println(logLine);
+            } else {
+                System.out.println(logLine);
+            }
         }
         // output to logfile
         if (logWriter != null) {
@@ -77,8 +88,14 @@ public class Logger {
     }
 
     public static void output(String outString) {
-        System.out.println(outString);
-        logWriter.println(outString);
+        if (out != null) {
+            out.println(outString);
+        } else {
+            System.out.println(outString);
+        }
+        if (logWriter != null) {
+            logWriter.println(outString);
+        }
     }
 
 }

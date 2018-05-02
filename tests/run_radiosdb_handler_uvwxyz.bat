@@ -1,0 +1,1 @@
+java -classpath ..\out\production\tp2;..\lib\* RadiosDBHandler u.# v.# w.# x.# y.# z.#

@@ -1,5 +1,7 @@
+import java.util.Base64;
 import java.util.concurrent.ThreadLocalRandom;
 
+// fuente generadora de contenido de una radio a partir de numeros al azar
 public class RadioSourceRandomNumbers implements RadioSource {
 
 
@@ -11,8 +13,9 @@ public class RadioSourceRandomNumbers implements RadioSource {
     @Override
     public byte[] getNextByteBlock() {
         int randomNum = ThreadLocalRandom.current().nextInt(0, 100 + 1);
-        System.out.println(" [x] Sent: " + randomNum);
-        return Integer.toString(randomNum).getBytes();
+        Logger.output(" [x] Sent: " + randomNum);
+        return Base64.getEncoder().encode(Integer.toString(randomNum)
+                .getBytes());
     }
 
     @Override

@@ -5,10 +5,13 @@ import java.io.BufferedReader;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
+import java.util.List;
 
+// clase para encapsular, cargar y guardar la configuracion de parametros
 public class Configuration {
 
-    public static int RadioSendPeriodSeconds = 2;
+    public static int RadioSendPeriodMilliseconds = 1000;
+    public static int RadioAudiofileBytesPerSecond = 102400;
     public static int KeepAlivePeriodSeconds = 5;
     public static int SecondsUntilDropConnection = 10;
     public static int MaxConnectionsPerFreeUser = 3;
@@ -16,17 +19,17 @@ public class Configuration {
 
     public static String RabbitMQHost = "localhost";
 
+    public static int PoolSizeForDBstatistics = 1;
+
     public static String UsersDBExchange = "USERS_DB";
-    public static String UsersDBConnectTag = "connect";
-    public static String UsersDBDisconnectTag = "disconnect";
-    public static String UsersDBKeepAliveTag = "keepalive";
+    public static int UsersTypeConnect = 1;
+    public static int UsersTypeDisconnect = 2;
+    public static int UsersTypeKeepAlive = 3;
     public static String UsersStatisticsExchange = "USERS_STATS";
     public static int UsersStatisticsPeriodSeconds = 10;
     public static int UserStatisticsN = 100;
 
     public static String RadiosDBExchange = "RADIOS_DB";
-    public static String RadiosDBConnectTag = "connect";
-    public static String RadiosDBDisconnectTag = "disconnect";
     public static String RadiosStatisticsExchange = "RADIOS_STATS";
     public static int RadioStatisticsPeriodSeconds = 10;
 
@@ -42,6 +45,12 @@ public class Configuration {
     public static String LogsExchange = "LOGS";
     public static String LogsConnectionTag = "connect";
     public static String LogsDisconnectionTag = "disconnect";
+
+    public static String maskListToStr(List<String> masks) {
+        return String.join("", masks)
+                .replace(".", "")
+                .replace("#", "");
+    }
 
     public static boolean loadConfiguration(String configFilename) {
 
@@ -64,17 +73,15 @@ public class Configuration {
             // load to object
             Configuration config = gson.fromJson(jsonString,
                     Configuration.class);
-
-            return true;
         }
         catch (FileNotFoundException e) {
-            /*Logger.log("Monitor", "config file: " + configFilename +
-                    " not found", Logger.logLevel.ERROR);*/
+            Logger.output("FileNotFoundException loading " +
+                    "configuration file, using defaults");
         } catch (IOException e) {
-            /*Logger.log("Monitor", "config file: " + configFilename +
-                    " could not be read", Logger.logLevel.ERROR);*/
+            Logger.output("IOException loading configuration file, using " +
+                    "defaults");
+        } finally {
+            return true;
         }
-
-        return false;
     }
 }

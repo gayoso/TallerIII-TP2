@@ -4,24 +4,29 @@ import com.rabbitmq.client.*;
 import java.io.IOException;
 import java.util.concurrent.TimeoutException;
 
+// clase para visualizar las estadisticas periodicas que emite la base de
+// datos de usuarios
 public class UserStatisticsViewer extends RabbitMQProcess {
 
     public UserStatisticsViewer(String host) throws IOException, TimeoutException {
         super(host);
 
         // declare USERS_STATS exchange
-        channel.exchangeDeclare(Configuration.UsersStatisticsExchange,
+        getChannel().exchangeDeclare(Configuration.UsersStatisticsExchange,
                 BuiltinExchangeType.FANOUT);
+    }
 
+    @Override
+    public void run() throws IOException {
         consumeStatistics();
     }
 
     private String consumeStatistics() throws IOException {
-        String statisticsQueue = channel.queueDeclare().getQueue();
-        channel.queueBind(statisticsQueue,
+        String statisticsQueue = getChannel().queueDeclare().getQueue();
+        getChannel().queueBind(statisticsQueue,
                 Configuration.UsersStatisticsExchange, "");
 
-        Consumer consumerStatistics = new DefaultConsumer(channel) {
+        Consumer consumerStatistics = new DefaultConsumer(getChannel()) {
             @Override
             public void handleDelivery(String consumerTag, Envelope envelope,
                                        AMQP.BasicProperties properties,
@@ -31,19 +36,24 @@ public class UserStatisticsViewer extends RabbitMQProcess {
                 UsersSecondsListenedStatistics statistics = new Gson().fromJson
                         (json, UsersSecondsListenedStatistics.class);
 
-                System.out.println(" [x] Showing connections per radio: ");
+                System.out.println(" [x] Showing users who listened most: ");
                 for (UserSecondsListened userStats :
-                        statistics.usersMostListenedSeconds) {
-                    System.out.println(userStats.username + ": " +
-                            userStats.secondsListened);
+                        statistics.getUsersMostListenedSeconds()) {
+                    System.out.println(userStats.getUsername() + ": " +
+                            userStats.getSecondsListened());
                 }
             }
         };
-        return channel.basicConsume(statisticsQueue, true, consumerStatistics);
+
+        // consume de una cola temporal a traves de un exchange
+        // por lo que no tiene sentido ack manual
+        return getChannel().basicConsume(statisticsQueue, true,
+                consumerStatistics);
     }
 
     public static void main(String[] argv) throws Exception {
         UserStatisticsViewer statisticsViewer =
                 new UserStatisticsViewer(Configuration.RabbitMQHost);
+        statisticsViewer.run();
     }
 }

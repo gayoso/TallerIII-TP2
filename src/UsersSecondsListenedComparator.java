@@ -6,12 +6,7 @@ public class UsersSecondsListenedComparator
     @Override
     public int compare(UserSecondsListened o1, UserSecondsListened o2) {
 
-        if (o2.secondsListened < o1.secondsListened) {
-            return -1;
-        }
-        if (o2.secondsListened > o1.secondsListened) {
-            return 1;
-        }
-        return 0;
+        return (int)Math.signum(o2.getSecondsListened() -
+                o1.getSecondsListened());
     }
 }

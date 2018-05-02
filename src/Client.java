@@ -1,16 +1,17 @@
 import com.google.gson.Gson;
 import com.rabbitmq.client.*;
+import java.util.Base64;
 
 import java.io.FileOutputStream;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
-import java.util.Base64;
 import java.util.Date;
 import java.util.NoSuchElementException;
 import java.util.Scanner;
 import java.util.concurrent.*;
 
+// esta clase es la aplicacion que los usuarios usan para conectarse
+// al sistema y escuchar radios
 public class Client extends  RabbitMQProcess {
 
     private String radioExchange = "";
@@ -41,27 +42,31 @@ public class Client extends  RabbitMQProcess {
             InterruptedException {
 
         if (username.equals("")) {
-            System.out.println("ERROR: Did you specify a username?");
+            Logger.output("ERROR: Did you specify a username?");
             return false;
         }
 
         // define callback queue
-        String callbackQueueName = channel.queueDeclare().getQueue();
+        String callbackQueueName = getChannel().queueDeclare().getQueue();
 
         // create request
         UserConnectRequest request = new UserConnectRequest(username, radio,
                 callbackQueueName);
         String requestJson = new Gson().toJson(request);
 
-        // publish to CONNECTIONS queue
-        channel.basicPublish("", Configuration.ConnectionsQueue, null,
-                requestJson.getBytes());
+        // publish to usersDB exchange to start register connection operation
+        DatabaseRequest usersdbRequest = new DatabaseRequest
+                (Configuration.UsersTypeConnect, requestJson, username);
+        getChannel().basicPublish(Configuration.UsersDBExchange,
+                usersdbRequest.getRoutingKey(), null,
+                new Gson().toJson(usersdbRequest).getBytes());
 
         final BlockingQueue<String> responseQueue =
                 new ArrayBlockingQueue<String>(1);
 
-        String callbackTag = channel.basicConsume(callbackQueueName,true,
-                new DefaultConsumer(channel) {
+        // es una cola temporaria, no sirve de nada el ack
+        String callbackTag = getChannel().basicConsume(callbackQueueName,true,
+                new DefaultConsumer(getChannel()) {
             @Override
             public void handleDelivery(String consumerTag, Envelope envelope,
                                        AMQP.BasicProperties properties,
@@ -71,17 +76,17 @@ public class Client extends  RabbitMQProcess {
         });
 
         String jsonResponse = responseQueue.take();
-        channel.basicCancel(callbackTag);
+        getChannel().basicCancel(callbackTag);
         UserConnectResponse response = new Gson().fromJson(jsonResponse,
                 UserConnectResponse.class);
-        if (!response.couldConnect) {
-            System.out.println("ERROR: Connection refused, are " +
+        if (!response.isCouldConnect()) {
+            Logger.output("ERROR: Connection refused, are " +
                     "you already connected on 3 devices?");
             return false;
         }
 
-        connectionId = response.connectionId;
-        radioExchange = Configuration.RadioExchangePrefix + response.radio;
+        connectionId = response.getConnectionId();
+        radioExchange = Configuration.RadioExchangePrefix + response.getRadio();
         return true;
     }
 
@@ -92,12 +97,12 @@ public class Client extends  RabbitMQProcess {
         }
 
         // declare radio broadcast exchange
-        channel.exchangeDeclare(radioExchange, BuiltinExchangeType.FANOUT);
+        getChannel().exchangeDeclare(radioExchange, BuiltinExchangeType.FANOUT);
 
         // declare temporary queue and bind
-        String queueName = channel.queueDeclare().getQueue();
-        channel.queueBind(queueName, radioExchange, "");
-        System.out.println("Creating queue: " + queueName);
+        String queueName = getChannel().queueDeclare().getQueue();
+        getChannel().queueBind(queueName, radioExchange, "");
+        Logger.output("Creating queue: " + queueName);
 
         // open new file for transmission
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd-HH-mm-ss");
@@ -105,17 +110,20 @@ public class Client extends  RabbitMQProcess {
                 "-" + connectionId + "-" + sdf.format(new Date()) + ".wav";
         transmissionWriter = new FileOutputStream(transmissionName);
 
-        Consumer consumer = new DefaultConsumer(channel) {
+        Consumer consumer = new DefaultConsumer(getChannel()) {
             @Override
             public void handleDelivery(String consumerTag, Envelope envelope,
                                        AMQP.BasicProperties properties,
                                        byte[] body) throws IOException {
                 String message = new String(body, "UTF-8");
-                System.out.println(" [x] Received '" + message + "'");
-                transmissionWriter.write(body);
+                Logger.output(" [x] Received '" + message + "'");
+                byte[] decodedBody = Base64.getDecoder().decode(body);
+                transmissionWriter.write(decodedBody);
             }
         };
-        radioConsumeTag = channel.basicConsume(queueName, true, consumer);
+        // es una cola temporaria, no sirve de nada el ack
+        radioConsumeTag = getChannel().basicConsume(queueName, true,
+                consumer);
         return true;
     }
 
@@ -127,29 +135,28 @@ public class Client extends  RabbitMQProcess {
                         connectionId, radio);
                 String requestJson = new Gson().toJson(request);
                 try {
-                    channel.basicPublish("", Configuration.KeepAliveQueue,
-                            null, requestJson.getBytes());
+                    getChannel().basicPublish("",
+                            Configuration.KeepAliveQueue, null,
+                            requestJson.getBytes());
                 } catch (IOException e) {
-                    e.printStackTrace();
+                    Logger.output("IOException while listening to" +
+                            "rado: " + radio + ", user: " + username +
+                            ", connection id: " + connectionId);
                 }
             }
         };
         keepAliveHandle = keepAliveScheduler.scheduleAtFixedRate
-                (sendKeepAlive, 5,5, TimeUnit.SECONDS);
+                (sendKeepAlive, Configuration.KeepAlivePeriodSeconds,
+                        Configuration.KeepAlivePeriodSeconds, TimeUnit.SECONDS);
     }
 
     public void stopKeepAlive() {
-        keepAliveScheduler.schedule(new Runnable() {
-            @Override
-            public void run() {
-                keepAliveHandle.cancel(true);
-            }
-        }, 0, TimeUnit.SECONDS);
+        keepAliveHandle.cancel(true);
     }
 
     public void stopListeningToRadio() throws IOException {
         if (radioConsumeTag.equals("")) {
-            System.out.println("ERROR: not listening to radio");
+            Logger.output("ERROR: not listening to radio");
         } else {
             // create request
             UserDisconnectRequest request = new UserDisconnectRequest(username,
@@ -157,11 +164,11 @@ public class Client extends  RabbitMQProcess {
             String requestJson = new Gson().toJson(request);
 
             // publish to DISCONNECTIONS queue
-            channel.basicPublish("", Configuration.DisconnectionsQueue, null,
-                    requestJson.getBytes());
+            getChannel().basicPublish("", Configuration.DisconnectionsQueue,
+                    null, requestJson.getBytes());
 
             // stop receiving transmission
-            channel.basicCancel(radioConsumeTag);
+            getChannel().basicCancel(radioConsumeTag);
             radioConsumeTag = "";
 
             // close transmission file
@@ -171,12 +178,12 @@ public class Client extends  RabbitMQProcess {
     }
 
     public void printOptions() {
-        System.out.println("\n");
-        System.out.println("Choose an action: ");
-        System.out.println("\t" + "1. Set user");
-        System.out.println("\t" + "2. Connect to radio");
-        System.out.println("\t" + "3. Disconnect from radio");
-        System.out.println("\t" + "4. Exit");
+        Logger.output("\n");
+        Logger.output("Choose an action: ");
+        Logger.output("\t" + "1. Set user");
+        Logger.output("\t" + "2. Connect to radio");
+        Logger.output("\t" + "3. Disconnect from radio");
+        Logger.output("\t" + "4. Exit");
     }
 
     public boolean mainMenu(Scanner in) throws IOException,
@@ -190,7 +197,7 @@ public class Client extends  RabbitMQProcess {
                 setUsername(username);
                 break;
             case 2:
-                System.out.println("Please specify a radio: ");
+                Logger.output("Please specify a radio: ");
                 String radio = in.nextLine();
                 setRadio(radio);
                 if (!requestConnectionToRadio()) {
@@ -204,10 +211,10 @@ public class Client extends  RabbitMQProcess {
                 stopKeepAlive();
                 break;
             case 4:
-                System.out.println("Press CTRL+C to exit");
+                Logger.output("Press CTRL+C to exit");
                 return true;
             default:
-                System.out.println("ERROR: Invalid option");
+                Logger.output("ERROR: Invalid option");
                 break;
         }
 
@@ -223,22 +230,28 @@ public class Client extends  RabbitMQProcess {
         }
     }
 
-
-    public static void main(String[] argv) throws Exception {
-
+    @Override
+    public void run() throws IOException {
         Scanner in = new Scanner(System.in);
-
-        Client client = new Client(Configuration.RabbitMQHost);
-        client.printOptions();
+        printOptions();
 
         boolean end = false;
         while (!end) {
             try {
-                end = client.mainMenu(in);
+                end = mainMenu(in);
+            // esta excepcion aparece al apretar ctrl+c
             } catch (NoSuchElementException e) {
+                end = true;
+            } catch (InterruptedException e) {
                 end = true;
             }
         }
+    }
+
+
+    public static void main(String[] argv) throws Exception {
+        Client client = new Client(Configuration.RabbitMQHost);
+        client.run();
     }
 
 }
